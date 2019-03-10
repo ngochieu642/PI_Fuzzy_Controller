@@ -5,6 +5,7 @@
 "pi_encoder\stm32f4xx_hal_msp.o"
 "pi_encoder\stm32f4xx_hal_tim.o"
 "pi_encoder\stm32f4xx_hal_tim_ex.o"
+"pi_encoder\stm32f4xx_hal_uart.o"
 "pi_encoder\stm32f4xx_hal_rcc.o"
 "pi_encoder\stm32f4xx_hal_rcc_ex.o"
 "pi_encoder\stm32f4xx_hal_flash.o"

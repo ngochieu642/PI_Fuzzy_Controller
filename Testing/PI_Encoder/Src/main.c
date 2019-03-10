@@ -44,6 +44,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <math.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -65,28 +66,89 @@
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
 
+UART_HandleTypeDef huart2;
+
 /* USER CODE BEGIN PV */
 
 uint16_t TIM_Period = 399; //This values may need to be recalculated = (timer_tick_freq/PWM_freq)-1, with timer_tick_freq = timer_default_freq / (pre_scaler+1)
 uint32_t Pulse_LeftMotor=0, Pulse_RightMotor=0; 	//Variable to count Encoder Left n Right
-uint32_t Speed_LeftMotor=0, Speed_RightMotor=0; 	//Variable from 0-100 to control duty cycle
-float Ke=0,Kde=0,Kout=0;													//Parameter
-float CurrentX=0, CurrentY=0, CurrentPhi=0, PrevX=0, PrevY=0, PrevPhi=0;//Current position of the vehicle
+uint32_t NotReset_PulseLeft =0, NotReset_PulseRight=0;
+float Speed_LeftMotor=0, Speed_RightMotor=0; 	//Variable from 0-100 to control duty cycle
+float Ke=3,Kde=0.5,Kout=50;													//Parameter
+float CurrentX=0, CurrentY=0, CurrentPhi=0, PrevPhi=0;//Current position of the vehicle
 float DestX=0, DestY=0;
 float PrevError=0, CurrErr=0;
 float dt=0.1f; 																		//Control Period
 float KhoangCach2Banh = 0.6f; //Khoang cach giua 2 banh xe
+extern uint8_t tim2Indicator=0; //Check if timer2 works
+extern float distance =0;
+
+uint8_t Tx[10]; //UART Transmit buffer
+float SendX,SendY;
+float EuclidThresh=0.1f;
+
+//Variable for going to different Destination
+extern bool reach1=false,reach2=false,reach3=false;
+struct listOfDest{
+	float* dest1;
+	unsigned int dest1_length;
+	
+	float* dest2;
+	unsigned int dest2_length;
+	
+	float* dest3;
+	unsigned int dest3_length;
+};
+float DestX1=2.5f, DestY1=0.25f, DestX2=4.6, DestY2=4.0, DestX3=6.7,DestY3=4.1;
+//Ham truyen UART
+void SendPos(){
+	unsigned char *chptr;
+	SendX = (float)CurrentX;
+	chptr = (unsigned char *)&SendX;
+	
+	Tx[0]=(*chptr++);
+	Tx[1]=(*chptr++);
+	Tx[2]=(*chptr++);
+	Tx[3]=(*chptr);
+	
+	SendY =(float) CurrentY;
+	chptr = (unsigned char *)&SendY;
+	
+	Tx[4]=(*chptr++);
+	Tx[5]=(*chptr++);
+	Tx[6]=(*chptr++);
+	Tx[7]=(*chptr);
+	
+	Tx[8]=0x0D;
+	Tx[9]=0x0A;
+	
+	HAL_UART_Transmit(&huart2,Tx,10,8000);
+}
+//Ham tinh toan
+float EuclidDistance(float x1,float y1,float x2, float y2){
+	return sqrt((x1-x2)*(x1-x2)+(y1-y2)*(y1-y2));
+}
+//Ham xuat % dong co
+void SetPWM_withDutyCycle_withStop(TIM_HandleTypeDef *htim, uint32_t Channel, int dutyCycle, int STOP_CODE){
+	
+	dutyCycle=(dutyCycle > 100 ) ? 100 : dutyCycle;
+	dutyCycle=(dutyCycle < 0)? 0: dutyCycle;
+	
+	/*This function allow to Write PWM in duty cycle with timer and channel parameters*/
+	int32_t pulse_length = TIM_Period*dutyCycle/100;
+	__HAL_TIM_SET_COMPARE(htim, Channel, pulse_length*(1-STOP_CODE));
+	
+};
+
 void SetPWM_withDutyCycle(TIM_HandleTypeDef *htim, uint32_t Channel, int dutyCycle){
 	
 	dutyCycle=(dutyCycle > 100 ) ? 100 : dutyCycle;
 	dutyCycle=(dutyCycle < 0)? 0: dutyCycle;
 	
 	/*This function allow to Write PWM in duty cycle with timer and channel parameters*/
-	int32_t pulse_length = (TIM_Period+1)*dutyCycle/100 -1;
+	int32_t pulse_length = TIM_Period*dutyCycle/100;
 	__HAL_TIM_SET_COMPARE(htim, Channel, pulse_length);
 };
-
-
 
 //Fuzzy functions
 double mftrap(double x,double L,double C1,double C2,double R){
@@ -106,6 +168,13 @@ double max(double num1,double num2){
 	return (num1 > num2 ) ? num1 : num2;
 }
 double Defuzzication_R(double e, double de){
+	
+	//Return e and de in range [-1 1]
+	e=(e>1)?1:e;
+	e=(e<-1)?-1:e;
+	de=(de>1)?1:de;
+	de=(de<-1)?-1:de; 
+	
 	double e_NE,e_ZE,e_PO,de_NE,de_ZE,de_PO;
 	
 	e_NE=mftrap(e,-1.1,-1,-0.1,0);
@@ -201,21 +270,67 @@ double GetError(float GocLai,float CurrentPhi){
 double GetDerivativeError(float oldErr,float newErr){
 	return (newErr-oldErr)/dt;
 }
+void GetNewDest(float xDestOld, float yDestOld, float xcurrent, float ycurrent){
+	float Distance = EuclidDistance(xDestOld,yDestOld,xcurrent,ycurrent);
+	if (Distance<EuclidThresh){
+		if(reach3){//Final point
+			DestX = xDestOld;
+			DestY = yDestOld;
+		}
+		else if(reach2){
+			DestX = DestX3;
+			DestY = DestY3;
+			reach3 = true;
+		} 
+		else if(reach1){
+			DestX = DestX2;
+			DestY = DestY2;
+			reach2 = true;
+		}
+		else{
+			if(!reach1){
+				reach1 = true;
+			}	
+		}
+	}
+	else{
+		DestX = xDestOld;
+		DestY = yDestOld;
+	}
+	
+}
 void ControlMotor(float e, float de){
 	float eFuzzy = Ke*e;
 	float deFuzzy =Kde*de;
 	
-	double aRight = Defuzzication_R(eFuzzy,deFuzzy);
-	double aLeft 	= Defuzzication_L(eFuzzy,deFuzzy);
+	double aRight = Defuzzication_R(Ke*eFuzzy,Kde*deFuzzy);
+	double aLeft 	= Defuzzication_L(Ke*eFuzzy,Kde*deFuzzy);
 	
 	Speed_RightMotor+=Kout*aRight*dt;
 	Speed_LeftMotor+=Kout*aLeft*dt;
 	
-	SetPWM_withDutyCycle(&htim4,TIM_CHANNEL_1,Speed_LeftMotor);
-	SetPWM_withDutyCycle(&htim4,TIM_CHANNEL_2,Speed_RightMotor);
+	Speed_LeftMotor=(Speed_LeftMotor>100)?100:Speed_LeftMotor;
+	Speed_LeftMotor=(Speed_LeftMotor<0)?0:Speed_LeftMotor;
+	
+	Speed_RightMotor=(Speed_RightMotor>100)?100:Speed_RightMotor;
+	Speed_RightMotor=(Speed_RightMotor<0)?0:Speed_RightMotor;
+	
+	distance=EuclidDistance(CurrentX,CurrentY,DestX,DestY);
+	
+	//STOP CODE RUN 
+	int STOPCODE=(distance>EuclidThresh)?0:1;
+	SetPWM_withDutyCycle_withStop(&htim4,TIM_CHANNEL_2,(int)Speed_LeftMotor,STOPCODE); //TIM_CHANNEL_2 = PD13 = Left Motor
+	SetPWM_withDutyCycle_withStop(&htim4,TIM_CHANNEL_3,(int)Speed_RightMotor,STOPCODE); //TIM_CHANNEL_3 = PD14 = Right Motor
+	
+	//WITHOUT STOP CODE
+//	SetPWM_withDutyCycle(&htim4,TIM_CHANNEL_2,(int)Speed_LeftMotor); //TIM_CHANNEL_2 = PD13 = Left Motor
+//	SetPWM_withDutyCycle(&htim4,TIM_CHANNEL_3,(int)Speed_RightMotor); //TIM_CHANNEL_3 = PD14 = Right Motor
+	
 }
 float Encoder2Distance(int pulse){
-	return (float)pulse*17/(350*1000);
+	// 1 vong dong co = 350 xung
+	// ban kinh truc dong co R = 7 mm
+	return (float)pulse*2*3.14f*7/(350*1000);
 }
 void CalculateNewPosition(float RightDistance, float LeftDistance){
 	
@@ -239,6 +354,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -278,6 +394,7 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM4_Init();
   MX_TIM2_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 	
 	//Start PWM 
@@ -286,8 +403,15 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_3);
 	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_4);
 	
+	//Initialize the Destination
+	DestX = DestX1;
+	DestY = DestY1;
 	//Start Timer 2
 	HAL_TIM_Base_Start_IT(&htim2);
+	
+	//Set GPIOD 12,15 to Vdd to Enable for the Right Driver
+	HAL_GPIO_WritePin(GPIOD,GPIO_PIN_12,GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOD,GPIO_PIN_15,GPIO_PIN_SET);
 
 
   /* USER CODE END 2 */
@@ -437,10 +561,6 @@ static void MX_TIM4_Init(void)
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
   if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
@@ -449,14 +569,43 @@ static void MX_TIM4_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
-  {
-    Error_Handler();
-  }
   /* USER CODE BEGIN TIM4_Init 2 */
 
   /* USER CODE END TIM4_Init 2 */
   HAL_TIM_MspPostInit(&htim4);
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
 
 }
 
@@ -470,9 +619,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12|GPIO_PIN_15, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : PD12 PD15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB3 PB4 */
   GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4;
@@ -494,6 +653,9 @@ static void MX_GPIO_Init(void)
 //Timer 2 call back
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	if(htim->Instance==htim2.Instance){
+		//Some Indicator
+		tim2Indicator ++;
+		
 		//Encoder2Distance
 		/*
 		Get 
@@ -507,6 +669,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		Return CurrenX, CurrentY, CurrentPhi
 		*/
 		CalculateNewPosition(distanceR,distanceL);
+		SendPos();
 	
 	//Update Paramss
 		/*
@@ -515,6 +678,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		*/
 		UpdateParams(CurrErr,CurrentPhi);
 		
+		
+	//Tinh lai DestX, DestY
+		/*
+		Params from Current dest and current position
+		*/
+		GetNewDest(DestX,DestY,CurrentX,CurrentY);
 		
 	//GetNewGocLai
 		/*

@@ -58,6 +58,7 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
 extern uint32_t Pulse_LeftMotor, Pulse_RightMotor;
+extern uint32_t NotReset_PulseLeft, NotReset_PulseRight;
 
 /* USER CODE END PV */
 
@@ -219,7 +220,10 @@ void SysTick_Handler(void)
 void EXTI3_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI3_IRQn 0 */
+	
+	//EXTI3 - PB3, used for left motor -PD13
 	Pulse_LeftMotor++;
+	NotReset_PulseLeft++;
   /* USER CODE END EXTI3_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_3);
   /* USER CODE BEGIN EXTI3_IRQn 1 */
@@ -233,7 +237,10 @@ void EXTI3_IRQHandler(void)
 void EXTI4_IRQHandler(void)
 {
   /* USER CODE BEGIN EXTI4_IRQn 0 */
+	
+	//EXTI4- PB4, used for right motor - PD14
 	Pulse_RightMotor++;  
+	NotReset_PulseRight++;
   /* USER CODE END EXTI4_IRQn 0 */
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_4);
   /* USER CODE BEGIN EXTI4_IRQn 1 */
@@ -252,7 +259,7 @@ void TIM2_IRQHandler(void)
   HAL_TIM_IRQHandler(&htim2);
   /* USER CODE BEGIN TIM2_IRQn 1 */
 
-  /* USER CODE END TIM2_IRQn 1 */
+  /* USER CODE END TIM2_	IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
