@@ -217,8 +217,6 @@ double Defuzzication_L(double e, double de){
 	return -1*Defuzzication_R(e,de);
 }
 
-
-
 //Control Function
 double GetNewGocLai(float KhoangNhinTruoc,float xDest,float yDest,float xCurr, float yCurr,float phiCurr){
 	float l = KhoangNhinTruoc;
