@@ -6,7 +6,7 @@
   ******************************************************************************
   ** This notice applies to any and all portions of this file
   * that are not between comment pairs USER CODE BEGIN and
-  * USER CODE END. Other portions of this file, whether 
+  * USER CODE END. Other portions of this file, whether
   * inserted by the user or by software development tools
   * are owned by their respective copyright owners.
   *
@@ -92,10 +92,10 @@ extern bool reach1=false,reach2=false,reach3=false;
 struct listOfDest{
 	float* dest1;
 	unsigned int dest1_length;
-	
+
 	float* dest2;
 	unsigned int dest2_length;
-	
+
 	float* dest3;
 	unsigned int dest3_length;
 };
@@ -105,23 +105,23 @@ void SendPos(){
 	unsigned char *chptr;
 	SendX = (float)CurrentX;
 	chptr = (unsigned char *)&SendX;
-	
+
 	Tx[0]=(*chptr++);
 	Tx[1]=(*chptr++);
 	Tx[2]=(*chptr++);
 	Tx[3]=(*chptr);
-	
+
 	SendY =(float) CurrentY;
 	chptr = (unsigned char *)&SendY;
-	
+
 	Tx[4]=(*chptr++);
 	Tx[5]=(*chptr++);
 	Tx[6]=(*chptr++);
 	Tx[7]=(*chptr);
-	
+
 	Tx[8]=0x0D;
 	Tx[9]=0x0A;
-	
+
 	HAL_UART_Transmit(&huart2,Tx,10,8000);
 }
 //Ham tinh toan
@@ -130,21 +130,21 @@ float EuclidDistance(float x1,float y1,float x2, float y2){
 }
 //Ham xuat % dong co
 void SetPWM_withDutyCycle_withStop(TIM_HandleTypeDef *htim, uint32_t Channel, int dutyCycle, int STOP_CODE){
-	
+
 	dutyCycle=(dutyCycle > 100 ) ? 100 : dutyCycle;
 	dutyCycle=(dutyCycle < 0)? 0: dutyCycle;
-	
+
 	/*This function allow to Write PWM in duty cycle with timer and channel parameters*/
 	int32_t pulse_length = TIM_Period*dutyCycle/100;
 	__HAL_TIM_SET_COMPARE(htim, Channel, pulse_length*(1-STOP_CODE));
-	
+
 };
 
 void SetPWM_withDutyCycle(TIM_HandleTypeDef *htim, uint32_t Channel, int dutyCycle){
-	
+
 	dutyCycle=(dutyCycle > 100 ) ? 100 : dutyCycle;
 	dutyCycle=(dutyCycle < 0)? 0: dutyCycle;
-	
+
 	/*This function allow to Write PWM in duty cycle with timer and channel parameters*/
 	int32_t pulse_length = TIM_Period*dutyCycle/100;
 	__HAL_TIM_SET_COMPARE(htim, Channel, pulse_length);
@@ -168,29 +168,29 @@ double max(double num1,double num2){
 	return (num1 > num2 ) ? num1 : num2;
 }
 double Defuzzication_R(double e, double de){
-	
+
 	//Return e and de in range [-1 1]
 	e=(e>1)?1:e;
 	e=(e<-1)?-1:e;
 	de=(de>1)?1:de;
-	de=(de<-1)?-1:de; 
-	
+	de=(de<-1)?-1:de;
+
 	double e_NE,e_ZE,e_PO,de_NE,de_ZE,de_PO;
-	
+
 	e_NE=mftrap(e,-1.1,-1,-0.1,0);
 	e_ZE=mftrap(e,-0.1,0,0,0.1);
-	e_PO=mftrap(e,0,0.1,1,1.1);	
-	
+	e_PO=mftrap(e,0,0.1,1,1.1);
+
 	de_NE=mftrap(de,-1.1,-1,-1,0);
 	de_ZE=mftrap(de,-1,0,0,1);
 	de_PO=mftrap(de,0,1,1,1.1);
-	
+
 	double	dR_NB=-1;
 	double	dR_NS=-0.4;
 	double	dR_ZE=0;
 	double	dR_PS=0.4;
 	double	dR_PB=1;
-	
+
 	double	beta1=e_NE*de_NE;   //R=NB
 	double	beta2=e_NE*de_ZE;   //R=NS
 	double	beta3=e_NE*de_PO;   //R=ZE
@@ -200,17 +200,17 @@ double Defuzzication_R(double e, double de){
 	double	beta7=e_PO*de_NE;   //R=ZE
 	double	beta8=e_PO*de_ZE;   //R=PS
 	double	beta9=e_PO*de_PO;   //R=PB
-	
+
 	double beta_NB=beta1;
 	double beta_NS=max(beta2,beta4);
 	double beta_ZE=max(beta3,max(beta5,beta7));
 	double beta_PS=max(beta6,beta8);
 	double beta_PB=beta9;
-	
-	
+
+
 	double sumBeta=beta_NB+beta_NS+beta_ZE+beta_PS+beta_PB;
 	double dR=(dR_NB*beta_NB+dR_NS*beta_NS+dR_ZE*beta_ZE+dR_PS*beta_PS+dR_PB*beta_PB)/sumBeta;
-	
+
 	return dR;
 }
 double Defuzzication_L(double e, double de){
@@ -223,16 +223,16 @@ double Defuzzication_L(double e, double de){
 double GetNewGocLai(float KhoangNhinTruoc,float xDest,float yDest,float xCurr, float yCurr,float phiCurr){
 	float l = KhoangNhinTruoc;
 	float xg=0,yg=0; //forhead point
-	
+
 	//Case 1: xDest != xCurr, we calculate (xg,yg), which is the forehead point
 	if(xDest!=xCurr){
 		float m =(yDest-yCurr)/(xDest-xCurr);
 		float c =(yCurr*xDest-yDest*xCurr)/(xDest-xCurr);
-		
+
 		float A= 1+m*m;
 		float B= -2*xCurr+2*m*c-2*m*yCurr;
 		float C= xCurr*xCurr+(c-yCurr)*(c-yCurr)-l*l;
-		
+
 		if(xDest < xCurr){
 			xg = (-B-sqrt(B*B-4*A*C))/(2*A);
 			yg = m*xg +c;
@@ -241,7 +241,7 @@ double GetNewGocLai(float KhoangNhinTruoc,float xDest,float yDest,float xCurr, f
 			yg = m*xg +c;
 		}
 	}
-	
+
 	//Case 2: xDest = xCurr, we calculate (xg,yg), which is the forehead point
 	if(xDest == xCurr){
 		if(yDest < yCurr){
@@ -252,14 +252,14 @@ double GetNewGocLai(float KhoangNhinTruoc,float xDest,float yDest,float xCurr, f
 			yg = yCurr+l;
 		}
 	}
-	
+
 	//Now we have (xg,yg), scale it into the vehicle coordinate
 	float xG = xg - xCurr;
 	float yG = yg - yCurr;
-	
+
 	float x = xG*sin(phiCurr)-yG*cos(phiCurr);
 	float y = xG*cos(phiCurr)+yG*sin(phiCurr);
-	
+
 	//Now we have (x,y), finally let's calculate GocLai
 	float alpha = atan(x/y);
 	return phiCurr-alpha;
@@ -281,7 +281,7 @@ void GetNewDest(float xDestOld, float yDestOld, float xcurrent, float ycurrent){
 			DestX = DestX3;
 			DestY = DestY3;
 			reach3 = true;
-		} 
+		}
 		else if(reach1){
 			DestX = DestX2;
 			DestY = DestY2;
@@ -290,42 +290,42 @@ void GetNewDest(float xDestOld, float yDestOld, float xcurrent, float ycurrent){
 		else{
 			if(!reach1){
 				reach1 = true;
-			}	
+			}
 		}
 	}
 	else{
 		DestX = xDestOld;
 		DestY = yDestOld;
 	}
-	
+
 }
 void ControlMotor(float e, float de){
 	float eFuzzy = Ke*e;
 	float deFuzzy =Kde*de;
-	
+
 	double aRight = Defuzzication_R(Ke*eFuzzy,Kde*deFuzzy);
 	double aLeft 	= Defuzzication_L(Ke*eFuzzy,Kde*deFuzzy);
-	
+
 	Speed_RightMotor+=Kout*aRight*dt;
 	Speed_LeftMotor+=Kout*aLeft*dt;
-	
+
 	Speed_LeftMotor=(Speed_LeftMotor>100)?100:Speed_LeftMotor;
 	Speed_LeftMotor=(Speed_LeftMotor<0)?0:Speed_LeftMotor;
-	
+
 	Speed_RightMotor=(Speed_RightMotor>100)?100:Speed_RightMotor;
 	Speed_RightMotor=(Speed_RightMotor<0)?0:Speed_RightMotor;
-	
+
 	distance=EuclidDistance(CurrentX,CurrentY,DestX,DestY);
-	
-	//STOP CODE RUN 
+
+	//STOP CODE RUN
 	int STOPCODE=(distance>EuclidThresh)?0:1;
 	SetPWM_withDutyCycle_withStop(&htim4,TIM_CHANNEL_2,(int)Speed_LeftMotor,STOPCODE); //TIM_CHANNEL_2 = PD13 = Left Motor
 	SetPWM_withDutyCycle_withStop(&htim4,TIM_CHANNEL_3,(int)Speed_RightMotor,STOPCODE); //TIM_CHANNEL_3 = PD14 = Right Motor
-	
+
 	//WITHOUT STOP CODE
 //	SetPWM_withDutyCycle(&htim4,TIM_CHANNEL_2,(int)Speed_LeftMotor); //TIM_CHANNEL_2 = PD13 = Left Motor
 //	SetPWM_withDutyCycle(&htim4,TIM_CHANNEL_3,(int)Speed_RightMotor); //TIM_CHANNEL_3 = PD14 = Right Motor
-	
+
 }
 float Encoder2Distance(int pulse){
 	// 1 vong dong co = 350 xung
@@ -333,11 +333,11 @@ float Encoder2Distance(int pulse){
 	return (float)pulse*2*3.14f*7/(350*1000);
 }
 void CalculateNewPosition(float RightDistance, float LeftDistance){
-	
+
 	CurrentX+=(float)((RightDistance+LeftDistance)*cos(PrevPhi)/2);
 	CurrentY+=(float)((RightDistance+LeftDistance)*sin(PrevPhi)/2);
 	CurrentPhi+=(RightDistance-LeftDistance)/KhoangCach2Banh;
-	
+
 	//Reset Encoder
 	Pulse_LeftMotor =0;
 	Pulse_RightMotor=0;
@@ -396,19 +396,19 @@ int main(void)
   MX_TIM2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-	
-	//Start PWM 
+
+	//Start PWM
 	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_3);
 	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_4);
-	
+
 	//Initialize the Destination
 	DestX = DestX1;
 	DestY = DestY1;
 	//Start Timer 2
 	HAL_TIM_Base_Start_IT(&htim2);
-	
+
 	//Set GPIOD 12,15 to Vdd to Enable for the Right Driver
 	HAL_GPIO_WritePin(GPIOD,GPIO_PIN_12,GPIO_PIN_SET);
 	HAL_GPIO_WritePin(GPIOD,GPIO_PIN_15,GPIO_PIN_SET);
@@ -436,11 +436,11 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /**Configure the main internal regulator output voltage 
+  /**Configure the main internal regulator output voltage
   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
-  /**Initializes the CPU, AHB and APB busses clocks 
+  /**Initializes the CPU, AHB and APB busses clocks
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
@@ -455,7 +455,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  /**Initializes the CPU, AHB and APB busses clocks 
+  /**Initializes the CPU, AHB and APB busses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
@@ -655,14 +655,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	if(htim->Instance==htim2.Instance){
 		//Some Indicator
 		tim2Indicator ++;
-		
+
 		//Encoder2Distance
 		/*
-		Get 
+		Get
 		*/
 		float distanceR = Encoder2Distance(Pulse_RightMotor);
 		float distanceL = Encoder2Distance(Pulse_LeftMotor);
-		
+
 		//Calculate new Position
 		/*
 		Params from Left and Right Distance, cope with CurrentX, CurrentY, PrevPhi
@@ -670,42 +670,42 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 		*/
 		CalculateNewPosition(distanceR,distanceL);
 		SendPos();
-	
+
 	//Update Paramss
 		/*
 		Params from Error and Phi
 		update PrevErr, PrevPhi
 		*/
 		UpdateParams(CurrErr,CurrentPhi);
-		
-		
+
+
 	//Tinh lai DestX, DestY
 		/*
 		Params from Current dest and current position
 		*/
 		GetNewDest(DestX,DestY,CurrentX,CurrentY);
-		
+
 	//GetNewGocLai
 		/*
 		Params from DestX,DestY, CurrentX, Current Y, CurrentPhi
 		return GocLai
 		*/
 		float gocLai=GetNewGocLai(0.6f, DestX,DestY,CurrentX,CurrentY,CurrentPhi);
-	
+
 	//Get current Error
 		/*
 		Params from GocLai and CurrentPhi
 		Return Error
 		*/
 		CurrErr = GetError(gocLai,CurrentPhi);
-	
+
 	//Get current Deriative Error
 		/*
 		Params from the new Error, and the PrevErr
 		Return Derivative Error
 		*/
 		float dCurrErr = GetDerivativeError(PrevError,CurrErr);
-		
+
 	//Control Motors
 		/*
 		Params from the new Error and the new Derivative Error
@@ -740,7 +740,7 @@ void Error_Handler(void)
   * @retval None
   */
 void assert_failed(uint8_t *file, uint32_t line)
-{ 
+{
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
